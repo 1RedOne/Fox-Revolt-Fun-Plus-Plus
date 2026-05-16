@@ -1,5 +1,5 @@
 # Fox Revolt Fun++
-![](assets\hero.png)
+![](assets/hero.png)
 ## Overview
 
 Fox Revolt Fun++ is an unofficial, Fun First, BepInEx balance mod for Royal Revolt Survivors.
