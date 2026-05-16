@@ -1,0 +1,21 @@
+{
+    "HealingMultiplier": 3.0,
+    "AttackSpeedMultiplier": 1.00,
+    "BasePlayerAttackSpeedBonus": 0.08,
+    "EarlyLevelPickSpeedAreaBonus": 0.03,
+    "LaterLevelPickSpeedAreaBonus": 0.01,
+    "HealthRegenerationMultiplier": 2.0,
+    "CoopReviveHealthPercent": 0.5,
+    "MoeWarriorIdContains": "Hero_Monk",
+    "MoeSecretMoveAbilityIdContains": "Cheers,DrinkBrew",
+    "MoeSecretMoveExtraCharges": 1,
+    "MoeSecretMoveRechargeTimeMultiplier": 0.5,
+    "MoeSecretMoveCooldownMultiplier": 0.5,
+    "CheersAbilityIdContains": "Cheers,DrinkBrew",
+    "CheersBuffStatMultiplier": 1.25,
+    "CheersBuffDurationMultiplier": 1.0,
+    "CheersRemoveHealthPenalty": true,
+    "CheersBuffNegativeStats": false,
+    "VerboseLogging": false,
+    "HeartbeatLogging": false
+}
