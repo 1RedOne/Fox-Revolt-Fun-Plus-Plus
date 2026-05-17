@@ -17,8 +17,8 @@ namespace FoxRevoltFunPlusPlus
     {
         public const string PluginGuid = "fox.foxrevoltfunplusplus";
         public const string PluginName = "Fox Revolt Fun++";
-        public const string PluginVersion = "0.1.26";
-        public const string BuildMarker = "plugin-layout-cleanup-2026-05-16-a";
+        public const string PluginVersion = "0.1.29";
+        public const string BuildMarker = "limit-break-buffs-2026-05-17-a";
 
         internal static ManualLogSource Log;
         internal static BuffSettings Buffs;
@@ -29,11 +29,9 @@ namespace FoxRevoltFunPlusPlus
         internal static float LaterLevelPickSpeedAreaBonus;
         internal static float HealthRegenerationMultiplier;
         internal static float CoopReviveHealthPercent;
+        internal static int PlayerSecretMoveExtraCharges;
+        internal static float PlayerSecretMoveRechargeTimeMultiplier;
         internal static string MoeWarriorIdContains;
-        internal static string MoeSecretMoveAbilityIdContains;
-        internal static int MoeSecretMoveExtraCharges;
-        internal static float MoeSecretMoveRechargeTimeMultiplier;
-        internal static float MoeSecretMoveCooldownMultiplier;
         internal static string CheersAbilityIdContains;
         internal static float CheersBuffStatMultiplier;
         internal static float CheersBuffDurationMultiplier;
@@ -42,11 +40,12 @@ namespace FoxRevoltFunPlusPlus
         internal static bool VerboseLogging;
         internal static bool HeartbeatLogging;
         internal static readonly Dictionary<int, float> LastLoggedLevelSpeedBonusByPlayer = new Dictionary<int, float>();
+        internal static readonly Dictionary<int, VisiblePlayerBuffStats> VisibleBuffStatsByStaticLoadout = new Dictionary<int, VisiblePlayerBuffStats>();
         internal static readonly HashSet<int> LoggedBaseSpeedPlayers = new HashSet<int>();
         internal static readonly HashSet<string> LoggedScreens = new HashSet<string>();
         internal static readonly Dictionary<int, string> LastGameStateBaseStates = new Dictionary<int, string>();
         internal static readonly HashSet<int> LoggedManualAbilityInstances = new HashSet<int>();
-        internal static readonly HashSet<int> PatchedMoeSecretMoveInstances = new HashSet<int>();
+        internal static readonly HashSet<int> PatchedPlayerSecretMoveInstances = new HashSet<int>();
         internal static readonly HashSet<int> PatchedCheersAbilityConfigs = new HashSet<int>();
 
         private static bool _initialized;
@@ -81,7 +80,7 @@ namespace FoxRevoltFunPlusPlus
             SceneManager.activeSceneChanged += HandleActiveSceneChanged;
 
             Log.LogInfo($"{PluginName} {PluginVersion} loaded. BuildMarker={BuildMarker}");
-            Log.LogInfo($"Buffs loaded from {BuffsJsonPath}: HealingMultiplier={HealingMultiplier:0.###}, BasePlayerAttackSpeedBonus={BasePlayerAttackSpeedBonus:0.###}, EarlyLevelPickSpeedAreaBonus={EarlyLevelPickSpeedAreaBonus:0.###}, LaterLevelPickSpeedAreaBonus={LaterLevelPickSpeedAreaBonus:0.###}, HealthRegenerationMultiplier={HealthRegenerationMultiplier:0.###}, CoopReviveHealthPercent={CoopReviveHealthPercent:0.###}, MoeSecretMoveExtraCharges={MoeSecretMoveExtraCharges}, MoeSecretMoveRechargeTimeMultiplier={MoeSecretMoveRechargeTimeMultiplier:0.###}, MoeSecretMoveCooldownMultiplier={MoeSecretMoveCooldownMultiplier:0.###}, CheersBuffStatMultiplier={CheersBuffStatMultiplier:0.###}, CheersBuffDurationMultiplier={CheersBuffDurationMultiplier:0.###}, CheersRemoveHealthPenalty={CheersRemoveHealthPenalty}, VerboseLogging={VerboseLogging}, HeartbeatLogging={HeartbeatLogging}");
+            Log.LogInfo($"Buffs loaded from {BuffsJsonPath}: HealingMultiplier={HealingMultiplier:0.###}, BasePlayerAttackSpeedBonus={BasePlayerAttackSpeedBonus:0.###}, EarlyLevelPickSpeedAreaBonus={EarlyLevelPickSpeedAreaBonus:0.###}, LaterLevelPickSpeedAreaBonus={LaterLevelPickSpeedAreaBonus:0.###}, HealthRegenerationMultiplier={HealthRegenerationMultiplier:0.###}, CoopReviveHealthPercent={CoopReviveHealthPercent:0.###}, PlayerSecretMoveExtraCharges={PlayerSecretMoveExtraCharges}, PlayerSecretMoveRechargeTimeMultiplier={PlayerSecretMoveRechargeTimeMultiplier:0.###}, CheersBuffStatMultiplier={CheersBuffStatMultiplier:0.###}, CheersBuffDurationMultiplier={CheersBuffDurationMultiplier:0.###}, CheersRemoveHealthPenalty={CheersRemoveHealthPenalty}, VerboseLogging={VerboseLogging}, HeartbeatLogging={HeartbeatLogging}");
             LogPatchedMethods();
         }
 
@@ -100,81 +99,47 @@ namespace FoxRevoltFunPlusPlus
             _isQuitting = true;
         }
 
-    [HarmonyPatch(typeof(BattleSimulationUnit), nameof(BattleSimulationUnit.AddHealth))]
-    internal static class BattleSimulationUnitAddHealthPatch
-    {
-        private static void Prefix(BattleSimulationUnit __instance, ref float amount)
+        [HarmonyPatch(typeof(BattleSimulationUnit), nameof(BattleSimulationUnit.AddHealth))]
+        internal static class BattleSimulationUnitAddHealthPatch
         {
-            if (amount <= 0f)
-                return;
-
-            float originalAmount = amount;
-            amount *= Plugin.HealingMultiplier;
-
-            if (Plugin.VerboseLogging)
-                Plugin.Log.LogInfo($"[Healing] UnitId={__instance.GetId()} healing {originalAmount:0.###} -> {amount:0.###} (x{Plugin.HealingMultiplier:0.###}).");
-        }
-    }
-
-    [HarmonyPatch(typeof(PlayerLoadout), nameof(PlayerLoadout.GetAdditionalStatList))]
-    internal static class PlayerLoadoutGetAdditionalStatListPatch
-    {
-        private static void Postfix(PlayerLoadout __instance, ref List<Stat> __result)
-        {
-            int playerIndex = __instance.PlayerIndex;
-            int levelPickCount = Math.Max(0, __instance.GetLevel() - 1);
-            int effectivePickCount = levelPickCount;
-            float baseBonus = Plugin.BasePlayerAttackSpeedBonus;
-            float levelSpeedAreaBonus = Plugin.CalculateLevelPickSpeedAreaBonus(effectivePickCount);
-            float totalSpeedBonus = baseBonus + levelSpeedAreaBonus;
-            float regenMultiplier = Math.Max(0f, Plugin.HealthRegenerationMultiplier);
-            float regenBonus = regenMultiplier - 1f;
-
-            if (Math.Abs(totalSpeedBonus) <= 0.0001f && Math.Abs(levelSpeedAreaBonus) <= 0.0001f && Math.Abs(regenBonus) <= 0.0001f)
-                return;
-
-            if (Math.Abs(totalSpeedBonus) > 0.0001f)
+            private static void Prefix(BattleSimulationUnit __instance, ref float amount)
             {
-                __result.Add(new Stat()
-                {
-                    type = Stat.StatType.AttackSpeedMultiplier,
-                    value = totalSpeedBonus
-                });
-            }
+                if (amount <= 0f)
+                    return;
 
-            if (Math.Abs(levelSpeedAreaBonus) > 0.0001f)
-            {
-                __result.Add(new Stat()
-                {
-                    type = Stat.StatType.AttackAreaMultiplier,
-                    value = levelSpeedAreaBonus
-                });
-            }
+                float originalAmount = amount;
+                amount *= Plugin.HealingMultiplier;
 
-            if (Math.Abs(regenBonus) > 0.0001f)
-            {
-                __result.Add(new Stat()
-                {
-                    type = Stat.StatType.HealthRegenMultiplier,
-                    value = regenBonus
-                });
-            }
-
-            if (!Plugin.LoggedBaseSpeedPlayers.Contains(playerIndex))
-            {
-                Plugin.LoggedBaseSpeedPlayers.Add(playerIndex);
-                Plugin.Log.LogInfo($"[StatInjection] Player={playerIndex} via PlayerLoadout.GetAdditionalStatList: AttackSpeed +{totalSpeedBonus:P0} ({baseBonus:P0} base + {levelSpeedAreaBonus:P0} level), AttackArea +{levelSpeedAreaBonus:P0}, HealthRegenMultiplier x{regenMultiplier:0.###}. Level={__instance.GetLevel()}, effective picks={effectivePickCount}.");
-            }
-
-            Plugin.LastLoggedLevelSpeedBonusByPlayer.TryGetValue(playerIndex, out float previousBonus);
-            if (levelSpeedAreaBonus > previousBonus + 0.0001f)
-            {
-                Plugin.LastLoggedLevelSpeedBonusByPlayer[playerIndex] = levelSpeedAreaBonus;
                 if (Plugin.VerboseLogging)
-                    Plugin.Log.LogInfo($"[LevelPickStats] SPEED/AREA INCREASED: Player={playerIndex} Level={__instance.GetLevel()} effective picks={effectivePickCount} level bonus {previousBonus:P0} -> {levelSpeedAreaBonus:P0}; total speed injected +{totalSpeedBonus:P0}.");
+                    Plugin.Log.LogInfo($"[Healing] UnitId={__instance.GetId()} healing {originalAmount:0.###} -> {amount:0.###} (x{Plugin.HealingMultiplier:0.###}).");
             }
         }
-    }
+
+        internal sealed class VisiblePlayerBuffStats
+        {
+            public readonly Stat AttackSpeed = new Stat() { type = Stat.StatType.AttackSpeedMultiplier };
+            public readonly Stat AttackArea = new Stat() { type = Stat.StatType.AttackAreaMultiplier };
+            public readonly Stat HealthRegen = new Stat() { type = Stat.StatType.HealthRegenMultiplier };
+            public string LastSignature;
+        }
+
+        [HarmonyPatch(typeof(PlayerLoadout), nameof(PlayerLoadout.GetStats))]
+        internal static class PlayerLoadoutGetStatsPatch
+        {
+            private static void Prefix(PlayerLoadout __instance)
+            {
+                Plugin.SyncVisiblePlayerBuffStats(__instance, "GetStats");
+            }
+        }
+
+        [HarmonyPatch(typeof(PlayerLoadout), nameof(PlayerLoadout.GetStatList))]
+        internal static class PlayerLoadoutGetStatListPatch
+        {
+            private static void Prefix(PlayerLoadout __instance)
+            {
+                Plugin.SyncVisiblePlayerBuffStats(__instance, "GetStatList");
+            }
+        }
 
         private static BuffSettings LoadBuffSettings(string path)
         {
@@ -211,11 +176,16 @@ namespace FoxRevoltFunPlusPlus
             LaterLevelPickSpeedAreaBonus = settings.LaterLevelPickSpeedAreaBonus;
             HealthRegenerationMultiplier = settings.HealthRegenerationMultiplier;
             CoopReviveHealthPercent = settings.CoopReviveHealthPercent;
+            PlayerSecretMoveExtraCharges = settings.PlayerSecretMoveExtraCharges;
+            PlayerSecretMoveRechargeTimeMultiplier = settings.PlayerSecretMoveRechargeTimeMultiplier;
+#pragma warning disable CS0618
+            if (PlayerSecretMoveExtraCharges == 1 && settings.MoeSecretMoveExtraCharges != 1)
+                PlayerSecretMoveExtraCharges = settings.MoeSecretMoveExtraCharges;
+
+            if (Math.Abs(PlayerSecretMoveRechargeTimeMultiplier - 0.5f) <= 0.0001f && Math.Abs(settings.MoeSecretMoveRechargeTimeMultiplier - 0.5f) > 0.0001f)
+                PlayerSecretMoveRechargeTimeMultiplier = settings.MoeSecretMoveRechargeTimeMultiplier;
+#pragma warning restore CS0618
             MoeWarriorIdContains = settings.MoeWarriorIdContains ?? "";
-            MoeSecretMoveAbilityIdContains = settings.MoeSecretMoveAbilityIdContains ?? "";
-            MoeSecretMoveExtraCharges = settings.MoeSecretMoveExtraCharges;
-            MoeSecretMoveRechargeTimeMultiplier = settings.MoeSecretMoveRechargeTimeMultiplier;
-            MoeSecretMoveCooldownMultiplier = settings.MoeSecretMoveCooldownMultiplier;
             CheersAbilityIdContains = settings.CheersAbilityIdContains ?? "";
             CheersBuffStatMultiplier = settings.CheersBuffStatMultiplier;
             CheersBuffDurationMultiplier = settings.CheersBuffDurationMultiplier;
@@ -230,6 +200,53 @@ namespace FoxRevoltFunPlusPlus
             int earlyPickCount = Math.Min(Math.Max(0, effectivePickCount), 3);
             int laterPickCount = Math.Max(0, effectivePickCount - 3);
             return earlyPickCount * EarlyLevelPickSpeedAreaBonus + laterPickCount * LaterLevelPickSpeedAreaBonus;
+        }
+
+        internal static void SyncVisiblePlayerBuffStats(PlayerLoadout loadout, string source)
+        {
+            int playerIndex = loadout.PlayerIndex;
+            int levelPickCount = Math.Max(0, loadout.GetLevel() - 1);
+            float baseBonus = BasePlayerAttackSpeedBonus;
+            float levelSpeedAreaBonus = CalculateLevelPickSpeedAreaBonus(levelPickCount);
+            float totalSpeedBonus = baseBonus + levelSpeedAreaBonus;
+            float regenMultiplier = Math.Max(0f, HealthRegenerationMultiplier);
+            float regenBonus = regenMultiplier - 1f;
+            StaticPlayerLoadout staticLoadout = loadout.GetStaticLoadout();
+            int loadoutKey = GetInstanceKey(staticLoadout);
+
+            if (!VisibleBuffStatsByStaticLoadout.TryGetValue(loadoutKey, out VisiblePlayerBuffStats visibleStats))
+            {
+                visibleStats = new VisiblePlayerBuffStats();
+                VisibleBuffStatsByStaticLoadout[loadoutKey] = visibleStats;
+
+                staticLoadout.MetaUpgrades.Add(visibleStats.AttackSpeed);
+                staticLoadout.MetaUpgrades.Add(visibleStats.AttackArea);
+                staticLoadout.MetaUpgrades.Add(visibleStats.HealthRegen);
+            }
+
+            visibleStats.AttackSpeed.value = totalSpeedBonus;
+            visibleStats.AttackArea.value = levelSpeedAreaBonus;
+            visibleStats.HealthRegen.value = regenBonus;
+
+            if (!LoggedBaseSpeedPlayers.Contains(playerIndex))
+            {
+                LoggedBaseSpeedPlayers.Add(playerIndex);
+                Log.LogInfo($"[VisibleStats] Player={playerIndex} visible buffs active from {source}: AttackSpeed +{totalSpeedBonus:P0} ({baseBonus:P0} base + {levelSpeedAreaBonus:P0} level), AttackArea +{levelSpeedAreaBonus:P0}, HealthRegen x{regenMultiplier:0.###}. Level={loadout.GetLevel()}, effective picks={levelPickCount}.");
+            }
+
+            LastLoggedLevelSpeedBonusByPlayer.TryGetValue(playerIndex, out float previousBonus);
+            if (levelSpeedAreaBonus > previousBonus + 0.0001f)
+            {
+                LastLoggedLevelSpeedBonusByPlayer[playerIndex] = levelSpeedAreaBonus;
+                Log.LogInfo($"[VisibleStats] Player={playerIndex} SPEED/AREA increased at level {loadout.GetLevel()}: level bonus {previousBonus:P0} -> {levelSpeedAreaBonus:P0}; total speed +{totalSpeedBonus:P0}.");
+            }
+
+            string signature = $"L{loadout.GetLevel()}:AS{totalSpeedBonus:0.####}:AR{levelSpeedAreaBonus:0.####}:HR{regenMultiplier:0.####}";
+            if (visibleStats.LastSignature != signature && VerboseLogging)
+            {
+                visibleStats.LastSignature = signature;
+                Log.LogInfo($"[VisibleStats] Player={playerIndex} synced visible loadout stats from {source}. Signature={signature}.");
+            }
         }
 
         internal static bool ContainsIgnoreCase(string value, string needle)
@@ -349,11 +366,34 @@ namespace FoxRevoltFunPlusPlus
     {
         private static void Postfix(GameSimulation __instance)
         {
+            WeaponLimitBreakBuffs.ApplyWeaponLimitBreakBuffs();
+
             if (!Plugin.HeartbeatLogging)
                 return;
 
             int loadoutCount = __instance.GetLoadouts()?.Count ?? 0;
             Plugin.Log.LogInfo($"[RunStart] GameSimulation.Initialize fired. BuildMarker={Plugin.BuildMarker}; loadouts={loadoutCount}.");
+        }
+    }
+
+    [HarmonyPatch(typeof(BattleVisualizationObject<ValueBlob>), nameof(BattleVisualizationObject<ValueBlob>.Initialize))]
+    internal static class ValueBlobVisualizationInitializePatch
+    {
+        private static void Postfix(BattleVisualizationObject<ValueBlob> __instance, ValueBlob initialData)
+        {
+            if (initialData == null || initialData.Type != BattleSimulationSpatialStorage.ValueBlobType.Experience)
+                return;
+
+            SpiritShardModifier.ApplyModificationIfWinterStage(__instance as BattleVisualizationValueBlob);
+        }
+    }
+
+    [HarmonyPatch(typeof(BattleVisualizationValueBlob), nameof(BattleVisualizationValueBlob.SetTravelTarget))]
+    internal static class BattleVisualizationValueBlobSetTravelTargetPatch
+    {
+        private static void Postfix(BattleVisualizationValueBlob __instance)
+        {
+            SpiritShardModifier.ApplyModificationIfWinterStage(__instance);
         }
     }
 
@@ -443,6 +483,8 @@ namespace FoxRevoltFunPlusPlus
     {
         private static void Postfix()
         {
+            WeaponLimitBreakBuffs.ApplyWeaponLimitBreakBuffs();
+
             if (!Plugin.HeartbeatLogging)
                 return;
 
@@ -484,6 +526,7 @@ namespace FoxRevoltFunPlusPlus
         private static void Prefix()
         {
             Plugin.LastLoggedLevelSpeedBonusByPlayer.Clear();
+            Plugin.VisibleBuffStatsByStaticLoadout.Clear();
             Plugin.LoggedBaseSpeedPlayers.Clear();
             GameStateBattleUpdateGameStatePatch.Reset();
         }

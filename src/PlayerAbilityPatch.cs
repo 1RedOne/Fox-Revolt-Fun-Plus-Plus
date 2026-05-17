@@ -16,6 +16,7 @@ namespace FoxRevoltFunPlusPlus
             string configTypeId = GetConfigTypeId(__instance);
             int abilityHash = SafeGetAbilityHash(__instance);
             bool chargeBased = __instance is BattleSimulationManualMultiUseAbility;
+            bool playerOwned = sourceUnit is BattleSimulationPlayerUnit;
 
             if (Plugin.HeartbeatLogging && !Plugin.LoggedManualAbilityInstances.Contains(instanceKey))
             {
@@ -23,39 +24,40 @@ namespace FoxRevoltFunPlusPlus
                 Plugin.Log.LogInfo($"[ManualAbilityProbe] WarriorId='{warriorId}' AbilityId='{abilityId}' ConfigTypeId='{configTypeId}' AbilityHash={abilityHash} ChargeBased={chargeBased} Type={__instance.GetType().Name}.");
             }
 
+            if (playerOwned && chargeBased)
+                PatchPlayerSecretMoveCharges(__instance, instanceKey, warriorId, abilityId, configTypeId, abilityHash);
+
+            // Moe's Cheers/DrinkBrew gets additional HP/stat cleanup. Other classes only get the shared charge/recharge tweak above.
             PatchCheersBuffConfig(__instance, warriorId, abilityId, configTypeId, abilityHash);
+        }
 
-            if (!chargeBased || !IsMoeWarrior(warriorId) || !MatchesAbilityTokens(abilityId, configTypeId, Plugin.MoeSecretMoveAbilityIdContains, blankMatches: true))
+        private static void PatchPlayerSecretMoveCharges(BattleSimulationManualAbility ability, int instanceKey, string warriorId, string abilityId, string configTypeId, int abilityHash)
+        {
+            if (Plugin.PatchedPlayerSecretMoveInstances.Contains(instanceKey))
                 return;
 
-            if (Plugin.PatchedMoeSecretMoveInstances.Contains(instanceKey))
-                return;
-
-            Plugin.PatchedMoeSecretMoveInstances.Add(instanceKey);
+            Plugin.PatchedPlayerSecretMoveInstances.Add(instanceKey);
             try
             {
-                Traverse traverse = Traverse.Create(__instance);
+                Traverse traverse = Traverse.Create(ability);
                 int oldMaxUses = traverse.Field<int>("_defaultMaxUses").Value;
                 float oldRechargeTime = traverse.Field<float>("_rechargeTime").Value;
-                float oldCooldown = traverse.Field<float>("_cooldown").Value;
                 float oldCurrentCharges = traverse.Field<float>("_currentCharges").Value;
 
-                int extraCharges = Math.Max(0, Plugin.MoeSecretMoveExtraCharges);
+                int extraCharges = Math.Max(0, Plugin.PlayerSecretMoveExtraCharges);
                 int newMaxUses = Math.Max(1, oldMaxUses + extraCharges);
-                float newRechargeTime = Math.Max(0.01f, oldRechargeTime * Math.Max(0.01f, Plugin.MoeSecretMoveRechargeTimeMultiplier));
-                float newCooldown = Math.Max(0f, oldCooldown * Math.Max(0f, Plugin.MoeSecretMoveCooldownMultiplier));
+                float newRechargeTime = Math.Max(0.01f, oldRechargeTime * Math.Max(0.01f, Plugin.PlayerSecretMoveRechargeTimeMultiplier));
                 float newCurrentCharges = Math.Max(oldCurrentCharges, newMaxUses);
 
                 traverse.Field("_defaultMaxUses").SetValue(newMaxUses);
                 traverse.Field("_rechargeTime").SetValue(newRechargeTime);
-                traverse.Field("_cooldown").SetValue(newCooldown);
                 traverse.Field("_currentCharges").SetValue(newCurrentCharges);
 
-                Plugin.Log.LogInfo($"[MoeSecretMove] Patched WarriorId='{warriorId}' AbilityId='{abilityId}' Hash={abilityHash}. Charges {oldMaxUses}->{newMaxUses}, CurrentCharges {oldCurrentCharges:0.###}->{newCurrentCharges:0.###}, Recharge {oldRechargeTime:0.###}->{newRechargeTime:0.###}, Cooldown {oldCooldown:0.###}->{newCooldown:0.###}.");
+                Plugin.Log.LogInfo($"[PlayerSecretMove] Patched WarriorId='{warriorId}' AbilityId='{abilityId}' ConfigTypeId='{configTypeId}' Hash={abilityHash}. Charges {oldMaxUses}->{newMaxUses}, CurrentCharges {oldCurrentCharges:0.###}->{newCurrentCharges:0.###}, Recharge {oldRechargeTime:0.###}->{newRechargeTime:0.###}.");
             }
             catch (Exception ex)
             {
-                Plugin.Log.LogWarning($"[MoeSecretMove] Failed to patch WarriorId='{warriorId}' AbilityId='{abilityId}' Hash={abilityHash}: {ex.GetType().Name}: {ex.Message}");
+                Plugin.Log.LogWarning($"[PlayerSecretMove] Failed to patch WarriorId='{warriorId}' AbilityId='{abilityId}' ConfigTypeId='{configTypeId}' Hash={abilityHash}: {ex.GetType().Name}: {ex.Message}");
             }
         }
 

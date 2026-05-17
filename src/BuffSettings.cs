@@ -11,10 +11,16 @@ namespace FoxRevoltFunPlusPlus
         public float LaterLevelPickSpeedAreaBonus = 0.01f;
         public float HealthRegenerationMultiplier = 2f;
         public float CoopReviveHealthPercent = 0.5f;
+        public int PlayerSecretMoveExtraCharges = 1;
+        public float PlayerSecretMoveRechargeTimeMultiplier = 0.5f;
         public string MoeWarriorIdContains = "Hero_Monk";
-        public string MoeSecretMoveAbilityIdContains = "Cheers,DrinkBrew";
+        [Obsolete("Use PlayerSecretMoveExtraCharges. Kept so older buffs.json files can migrate cleanly.")]
         public int MoeSecretMoveExtraCharges = 1;
+        [Obsolete("Use PlayerSecretMoveRechargeTimeMultiplier. Kept so older buffs.json files can migrate cleanly.")]
         public float MoeSecretMoveRechargeTimeMultiplier = 0.5f;
+        [Obsolete("Moe's secret move id filter is only used by older builds. CheersAbilityIdContains controls Moe's HP/stat tweak.")]
+        public string MoeSecretMoveAbilityIdContains = "Cheers,DrinkBrew";
+        [Obsolete("Cooldown is no longer modified; only charges and recharge time are patched.")]
         public float MoeSecretMoveCooldownMultiplier = 0.5f;
         public string CheersAbilityIdContains = "Cheers,DrinkBrew";
         public float CheersBuffStatMultiplier = 3f;
