@@ -5,9 +5,9 @@ namespace FoxRevoltFunPlusPlus
 {
     public static class SpiritShardModifier
     {
-        private static readonly Color WinterShardCore = new Color(7.972062f, 2.1011283f, 9.972529f, 1f);
-        private static readonly Color WinterShardGlow = new Color(15.114428f, 6.131323f, 15.012922f, 1f);
-        private static readonly Color WinterShardRim = new Color(10.463949f, 0f, 14.074751f, 1f);
+        private static readonly Color WinterShardCore = new Color(4.972062f, 2.1011283f, 9.972529f, 1f);
+        private static readonly Color WinterShardGlow = new Color(8.114428f, 6.131323f, 15.012922f, 1f);
+        private static readonly Color WinterShardRim = new Color(9.463949f, 0f, 14.074751f, 1f);
         private static readonly Color WinterShardFallback = new Color(0.95f, 0.25f, 1.25f, 1f);
 
         private static readonly int[] WinterShardColorProperties =
