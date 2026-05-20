@@ -44,7 +44,8 @@ namespace FoxRevoltFunPlusPlus
                 float oldRechargeTime = traverse.Field<float>("_rechargeTime").Value;
                 float oldCurrentCharges = traverse.Field<float>("_currentCharges").Value;
 
-                int extraCharges = Math.Max(0, Plugin.PlayerSecretMoveExtraCharges);
+                float purchasedChargeProgress = MetaProgressionShopHandlers.GetPurchasedSpecialMoveExtraChargeProgress();
+                int extraCharges = MetaProgressionShopHandlers.GetPurchasedSpecialMoveWholeExtraCharges();
                 int newMaxUses = Math.Max(1, oldMaxUses + extraCharges);
                 float newRechargeTime = Math.Max(0.01f, oldRechargeTime * Math.Max(0.01f, Plugin.PlayerSecretMoveRechargeTimeMultiplier));
                 float newCurrentCharges = Math.Max(oldCurrentCharges, newMaxUses);
@@ -53,7 +54,7 @@ namespace FoxRevoltFunPlusPlus
                 traverse.Field("_rechargeTime").SetValue(newRechargeTime);
                 traverse.Field("_currentCharges").SetValue(newCurrentCharges);
 
-                Plugin.Log.LogInfo($"[PlayerSecretMove] Patched WarriorId='{warriorId}' AbilityId='{abilityId}' ConfigTypeId='{configTypeId}' Hash={abilityHash}. Charges {oldMaxUses}->{newMaxUses}, CurrentCharges {oldCurrentCharges:0.###}->{newCurrentCharges:0.###}, Recharge {oldRechargeTime:0.###}->{newRechargeTime:0.###}.");
+                Plugin.Log.LogInfo($"[PlayerSecretMove] Patched WarriorId='{warriorId}' AbilityId='{abilityId}' ConfigTypeId='{configTypeId}' Hash={abilityHash}. Charges {oldMaxUses}->{newMaxUses}, PurchasedChargeProgress={purchasedChargeProgress:0.###}, AppliedExtraCharges={extraCharges}, CurrentCharges {oldCurrentCharges:0.###}->{newCurrentCharges:0.###}, Recharge {oldRechargeTime:0.###}->{newRechargeTime:0.###}.");
             }
             catch (Exception ex)
             {

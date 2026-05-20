@@ -24,12 +24,8 @@ namespace FoxRevoltFunPlusPlus
         internal static BuffSettings Buffs;
         internal static string BuffsJsonPath;
         internal static float HealingMultiplier;
-        internal static float BasePlayerAttackSpeedBonus;
-        internal static float EarlyLevelPickSpeedAreaBonus;
-        internal static float LaterLevelPickSpeedAreaBonus;
         internal static float HealthRegenerationMultiplier;
         internal static float CoopReviveHealthPercent;
-        internal static int PlayerSecretMoveExtraCharges;
         internal static float PlayerSecretMoveRechargeTimeMultiplier;
         internal static string MoeWarriorIdContains;
         internal static string CheersAbilityIdContains;
@@ -80,7 +76,7 @@ namespace FoxRevoltFunPlusPlus
             SceneManager.activeSceneChanged += HandleActiveSceneChanged;
 
             Log.LogInfo($"{PluginName} {PluginVersion} loaded. BuildMarker={BuildMarker}");
-            Log.LogInfo($"Buffs loaded from {BuffsJsonPath}: HealingMultiplier={HealingMultiplier:0.###}, BasePlayerAttackSpeedBonus={BasePlayerAttackSpeedBonus:0.###}, EarlyLevelPickSpeedAreaBonus={EarlyLevelPickSpeedAreaBonus:0.###}, LaterLevelPickSpeedAreaBonus={LaterLevelPickSpeedAreaBonus:0.###}, HealthRegenerationMultiplier={HealthRegenerationMultiplier:0.###}, CoopReviveHealthPercent={CoopReviveHealthPercent:0.###}, PlayerSecretMoveExtraCharges={PlayerSecretMoveExtraCharges}, PlayerSecretMoveRechargeTimeMultiplier={PlayerSecretMoveRechargeTimeMultiplier:0.###}, CheersBuffStatMultiplier={CheersBuffStatMultiplier:0.###}, CheersBuffDurationMultiplier={CheersBuffDurationMultiplier:0.###}, CheersRemoveHealthPenalty={CheersRemoveHealthPenalty}, VerboseLogging={VerboseLogging}, HeartbeatLogging={HeartbeatLogging}");
+            Log.LogInfo($"Buffs loaded from {BuffsJsonPath}: HealingMultiplier={HealingMultiplier:0.###}, HealthRegenerationMultiplier={HealthRegenerationMultiplier:0.###}, CoopReviveHealthPercent={CoopReviveHealthPercent:0.###}, PlayerSecretMoveRechargeTimeMultiplier={PlayerSecretMoveRechargeTimeMultiplier:0.###}, CheersBuffStatMultiplier={CheersBuffStatMultiplier:0.###}, CheersBuffDurationMultiplier={CheersBuffDurationMultiplier:0.###}, CheersRemoveHealthPenalty={CheersRemoveHealthPenalty}, VerboseLogging={VerboseLogging}, HeartbeatLogging={HeartbeatLogging}. Special move extra charges come from blacksmith meta progression.");
             LogPatchedMethods();
         }
 
@@ -171,17 +167,10 @@ namespace FoxRevoltFunPlusPlus
         private static void ApplyBuffSettings(BuffSettings settings)
         {
             HealingMultiplier = settings.HealingMultiplier;
-            BasePlayerAttackSpeedBonus = settings.BasePlayerAttackSpeedBonus;
-            EarlyLevelPickSpeedAreaBonus = settings.EarlyLevelPickSpeedAreaBonus;
-            LaterLevelPickSpeedAreaBonus = settings.LaterLevelPickSpeedAreaBonus;
             HealthRegenerationMultiplier = settings.HealthRegenerationMultiplier;
             CoopReviveHealthPercent = settings.CoopReviveHealthPercent;
-            PlayerSecretMoveExtraCharges = settings.PlayerSecretMoveExtraCharges;
             PlayerSecretMoveRechargeTimeMultiplier = settings.PlayerSecretMoveRechargeTimeMultiplier;
 #pragma warning disable CS0618
-            if (PlayerSecretMoveExtraCharges == 1 && settings.MoeSecretMoveExtraCharges != 1)
-                PlayerSecretMoveExtraCharges = settings.MoeSecretMoveExtraCharges;
-
             if (Math.Abs(PlayerSecretMoveRechargeTimeMultiplier - 0.5f) <= 0.0001f && Math.Abs(settings.MoeSecretMoveRechargeTimeMultiplier - 0.5f) > 0.0001f)
                 PlayerSecretMoveRechargeTimeMultiplier = settings.MoeSecretMoveRechargeTimeMultiplier;
 #pragma warning restore CS0618
@@ -195,20 +184,12 @@ namespace FoxRevoltFunPlusPlus
             HeartbeatLogging = settings.HeartbeatLogging;
         }
 
-        internal static float CalculateLevelPickSpeedAreaBonus(int effectivePickCount)
-        {
-            int earlyPickCount = Math.Min(Math.Max(0, effectivePickCount), 3);
-            int laterPickCount = Math.Max(0, effectivePickCount - 3);
-            return earlyPickCount * EarlyLevelPickSpeedAreaBonus + laterPickCount * LaterLevelPickSpeedAreaBonus;
-        }
-
         internal static void SyncVisiblePlayerBuffStats(PlayerLoadout loadout, string source)
         {
             int playerIndex = loadout.PlayerIndex;
             int levelPickCount = Math.Max(0, loadout.GetLevel() - 1);
-            float baseBonus = BasePlayerAttackSpeedBonus;
-            float levelSpeedAreaBonus = CalculateLevelPickSpeedAreaBonus(levelPickCount);
-            float totalSpeedBonus = baseBonus + levelSpeedAreaBonus;
+            ModInjectedBuffValues injectedBuffs = MetaProgressionShopHandlers.CalculateInjectedBuffs(levelPickCount);
+            float totalSpeedBonus = injectedBuffs.BaseAttackSpeedBonus + injectedBuffs.LevelAttackSpeedBonus;
             float regenMultiplier = Math.Max(0f, HealthRegenerationMultiplier);
             float regenBonus = regenMultiplier - 1f;
             StaticPlayerLoadout staticLoadout = loadout.GetStaticLoadout();
@@ -225,23 +206,23 @@ namespace FoxRevoltFunPlusPlus
             }
 
             visibleStats.AttackSpeed.value = totalSpeedBonus;
-            visibleStats.AttackArea.value = levelSpeedAreaBonus;
+            visibleStats.AttackArea.value = injectedBuffs.LevelAttackAreaBonus;
             visibleStats.HealthRegen.value = regenBonus;
 
             if (!LoggedBaseSpeedPlayers.Contains(playerIndex))
             {
                 LoggedBaseSpeedPlayers.Add(playerIndex);
-                Log.LogInfo($"[VisibleStats] Player={playerIndex} visible buffs active from {source}: AttackSpeed +{totalSpeedBonus:P0} ({baseBonus:P0} base + {levelSpeedAreaBonus:P0} level), AttackArea +{levelSpeedAreaBonus:P0}, HealthRegen x{regenMultiplier:0.###}. Level={loadout.GetLevel()}, effective picks={levelPickCount}.");
+                Log.LogInfo($"[VisibleStats] Player={playerIndex} visible buffs active from {source}: AttackSpeed +{totalSpeedBonus:P0} ({injectedBuffs.BaseAttackSpeedBonus:P0} shop base + {injectedBuffs.LevelAttackSpeedBonus:P0} level picks), AttackArea +{injectedBuffs.LevelAttackAreaBonus:P0}, HealthRegen x{regenMultiplier:0.###}. Level={loadout.GetLevel()}, effective picks={levelPickCount}, per-pick speed +{injectedBuffs.AttackSpeedPerLevelPick:P0}, per-pick area +{injectedBuffs.AttackAreaPerLevelPick:P0}.");
             }
 
             LastLoggedLevelSpeedBonusByPlayer.TryGetValue(playerIndex, out float previousBonus);
-            if (levelSpeedAreaBonus > previousBonus + 0.0001f)
+            if (injectedBuffs.LevelAttackSpeedBonus > previousBonus + 0.0001f)
             {
-                LastLoggedLevelSpeedBonusByPlayer[playerIndex] = levelSpeedAreaBonus;
-                Log.LogInfo($"[VisibleStats] Player={playerIndex} SPEED/AREA increased at level {loadout.GetLevel()}: level bonus {previousBonus:P0} -> {levelSpeedAreaBonus:P0}; total speed +{totalSpeedBonus:P0}.");
+                LastLoggedLevelSpeedBonusByPlayer[playerIndex] = injectedBuffs.LevelAttackSpeedBonus;
+                Log.LogInfo($"[VisibleStats] Player={playerIndex} SPEED/AREA increased at level {loadout.GetLevel()}: level speed bonus {previousBonus:P0} -> {injectedBuffs.LevelAttackSpeedBonus:P0}; level area bonus +{injectedBuffs.LevelAttackAreaBonus:P0}; total speed +{totalSpeedBonus:P0}.");
             }
 
-            string signature = $"L{loadout.GetLevel()}:AS{totalSpeedBonus:0.####}:AR{levelSpeedAreaBonus:0.####}:HR{regenMultiplier:0.####}";
+            string signature = $"L{loadout.GetLevel()}:AS{totalSpeedBonus:0.####}:AR{injectedBuffs.LevelAttackAreaBonus:0.####}:HR{regenMultiplier:0.####}";
             if (visibleStats.LastSignature != signature && VerboseLogging)
             {
                 visibleStats.LastSignature = signature;
@@ -376,6 +357,109 @@ namespace FoxRevoltFunPlusPlus
         }
     }
 
+    [HarmonyPatch(typeof(PlayerData), nameof(PlayerData.PatchSaveGame))]
+    internal static class PlayerDataPatchSaveGamePatch
+    {
+        private static void Prefix(AllBalancing balancing)
+        {
+            try
+            {
+                MetaProgressionShopHandlers.AddMetaShopItems(balancing?.MetaBalancing);
+            }
+            catch (Exception ex)
+            {
+                Plugin.Log?.LogWarning($"[MetaShop] Failed to prepare mod meta upgrades before save patch. {ex.GetType().Name}: {ex.Message}");
+            }
+        }
+
+        private static void Postfix(PlayerData __instance, AllBalancing balancing)
+        {
+            try
+            {
+                MetaProgressionShopHandlers.AddMetaShopItems(
+                    balancing?.MetaBalancing,
+                    __instance?.MetaUpgrades);
+            }
+            catch (Exception ex)
+            {
+                Plugin.Log?.LogWarning($"[MetaShop] Failed to apply mod meta progress after save patch. {ex.GetType().Name}: {ex.Message}");
+            }
+        }
+    }
+
+    [HarmonyPatch(typeof(PlayerData), nameof(PlayerData.Save))]
+    internal static class PlayerDataSavePatch
+    {
+        private static void Prefix(PlayerData __instance, out RemovedModMetaUpgradeState __state)
+        {
+            __state = ModMetaProgressionStore.RemoveRuntimeEntriesBeforeVanillaSave(__instance);
+        }
+
+        private static void Postfix(RemovedModMetaUpgradeState __state)
+        {
+            ModMetaProgressionStore.RestoreRuntimeEntriesAfterVanillaSave(__state);
+        }
+    }
+
+    [HarmonyPatch(typeof(PlayerDataMetaUpgrade), nameof(PlayerDataMetaUpgrade.Upgrade))]
+    internal static class PlayerDataMetaUpgradeUpgradePatch
+    {
+        private static void Postfix(PlayerDataMetaUpgrade __instance)
+        {
+            ModMetaProgressionStore.SaveFromRuntime(__instance);
+        }
+    }
+
+    [HarmonyPatch(typeof(PlayerDataMetaUpgrade), nameof(PlayerDataMetaUpgrade.DownGrade))]
+    internal static class PlayerDataMetaUpgradeDownGradePatch
+    {
+        private static void Postfix(PlayerDataMetaUpgrade __instance)
+        {
+            ModMetaProgressionStore.SaveFromRuntime(__instance);
+        }
+    }
+
+    [HarmonyPatch(typeof(PlayerDataMetaUpgrades), nameof(PlayerDataMetaUpgrades.GetMetaUpgradeStats))]
+    internal static class PlayerDataMetaUpgradesGetMetaUpgradeStatsPatch
+    {
+        private static void Postfix(PlayerDataMetaUpgrades __instance, List<Stat> __result)
+        {
+            if (__instance?.Upgrades == null || __result == null)
+                return;
+
+            foreach (PlayerDataMetaUpgrade playerUpgrade in __instance.Upgrades)
+            {
+                if (playerUpgrade == null || !ModMetaProgressionStore.IsModMetaUpgrade(playerUpgrade.TypeId))
+                    continue;
+
+                try
+                {
+                    RemoveMatchingStats(__result, playerUpgrade.GetCurrentLevelStats());
+                }
+                catch (Exception ex)
+                {
+                    Plugin.Log?.LogWarning($"[MetaShop] Failed to exclude mod meta stats from vanilla export for '{playerUpgrade.TypeId}'. {ex.GetType().Name}: {ex.Message}");
+                }
+            }
+        }
+
+        private static void RemoveMatchingStats(List<Stat> result, List<Stat> statsToRemove)
+        {
+            if (statsToRemove == null)
+                return;
+
+            foreach (Stat statToRemove in statsToRemove)
+            {
+                if (statToRemove == null)
+                    continue;
+
+                int index = result.FindLastIndex(stat => stat != null && stat.type == statToRemove.type && Math.Abs(stat.value - statToRemove.value) <= 0.0001f);
+                if (index >= 0)
+                    result.RemoveAt(index);
+            }
+        }
+    }
+
     [HarmonyPatch(typeof(BattleVisualizationObject<ValueBlob>), nameof(BattleVisualizationObject<ValueBlob>.Initialize))]
     internal static class ValueBlobVisualizationInitializePatch
     {
@@ -484,6 +568,7 @@ namespace FoxRevoltFunPlusPlus
         private static void Postfix()
         {
             WeaponLimitBreakBuffs.ApplyWeaponLimitBreakBuffs();
+            MetaProgressionShopHandlers.AddMetaShopItems(createPlayerSaveEntries: true);
 
             if (!Plugin.HeartbeatLogging)
                 return;
@@ -495,6 +580,11 @@ namespace FoxRevoltFunPlusPlus
     [HarmonyPatch(typeof(UpgradesScreen), "InitializeScreen")]
     internal static class UpgradesScreenInitializeScreenPatch
     {
+        private static void Prefix()
+        {
+            MetaProgressionShopHandlers.AddMetaShopItems(createPlayerSaveEntries: true);
+        }
+
         private static void Postfix()
         {
             if (!Plugin.HeartbeatLogging)
@@ -502,6 +592,33 @@ namespace FoxRevoltFunPlusPlus
 
             int gold = Singleton<GameData>.Instance.PlayerData.MetaUpgrades.GetCurrentGold();
             Plugin.Log.LogInfo($"[UIHeartbeat] UpgradesScreen.InitializeScreen fired. CurrentGold={gold}. BuildMarker={Plugin.BuildMarker}.");
+        }
+    }
+
+    [HarmonyPatch(typeof(UpgradesScreen), nameof(UpgradesScreen.BuyUpgrade))]
+    internal static class UpgradesScreenBuyUpgradePatch
+    {
+        private static void Postfix()
+        {
+            ModMetaProgressionStore.SaveAllFromRuntime();
+        }
+    }
+
+    [HarmonyPatch(typeof(UpgradesScreen), nameof(UpgradesScreen.RefundUpgrade))]
+    internal static class UpgradesScreenRefundUpgradePatch
+    {
+        private static void Postfix()
+        {
+            ModMetaProgressionStore.SaveAllFromRuntime();
+        }
+    }
+
+    [HarmonyPatch(typeof(UpgradesScreen), "RefundAllUpgrades")]
+    internal static class UpgradesScreenRefundAllUpgradesPatch
+    {
+        private static void Postfix()
+        {
+            ModMetaProgressionStore.SaveAllFromRuntime();
         }
     }
 
@@ -592,12 +709,14 @@ namespace FoxRevoltFunPlusPlus
     {
         private static void Postfix(GameStateBattle __instance)
         {
+            LogModBlacksmithItemsAtBattleStart();
+
             if (!Plugin.HeartbeatLogging)
                 return;
 
             List<BattlePlayer> battlePlayers = Traverse.Create(__instance).Field<List<BattlePlayer>>("_battlePlayers").Value;
             int playerCount = battlePlayers?.Count ?? 0;
-            Plugin.Log.LogInfo($"[GameStateBattle] InitializePostScenes fired. BattlePlayers={playerCount}; BasePlayerAttackSpeedBonus={Plugin.BasePlayerAttackSpeedBonus:P0}; regen x{Plugin.HealthRegenerationMultiplier:0.###}.");
+            Plugin.Log.LogInfo($"[GameStateBattle] InitializePostScenes fired. BattlePlayers={playerCount}; shop-driven speed/area buffs active; regen x{Plugin.HealthRegenerationMultiplier:0.###}.");
 
             if (battlePlayers == null)
                 return;
@@ -610,6 +729,26 @@ namespace FoxRevoltFunPlusPlus
 
                 BattleSimulationUnitStats stats = loadout.GetStats();
                 Plugin.Log.LogInfo($"[GameStateBattle] Player={loadout.PlayerIndex} loadout stats now AttackSpeedMultiplier={stats.AttackSpeedMultiplier:0.###}, TotalAttackCooldown={stats.TotalAttackCooldown:0.###}, HealthRegenMultiplier={stats.HealthRegenerationMultiplier:0.###}, TotalHealthRegeneration={stats.TotalHealthRegeneration:0.###}.");
+            }
+        }
+
+        private static void LogModBlacksmithItemsAtBattleStart()
+        {
+            try
+            {
+                List<PlayerDataMetaUpgrade> modUpgrades = Singleton<GameData>.Instance?.PlayerData?.MetaUpgrades?.Upgrades?
+                    .Where(upgrade => upgrade != null && ModMetaProgressionStore.IsModMetaUpgrade(upgrade.TypeId))
+                    .ToList() ?? new List<PlayerDataMetaUpgrade>();
+
+                string itemSummary = modUpgrades.Count == 0
+                    ? ""
+                    : " " + string.Join(" ", modUpgrades.Select(upgrade => $"[{upgrade.TypeId} L{upgrade.Level}/{upgrade.GetLevelCount()} Unlocked={upgrade.Unlocked}]"));
+
+                Plugin.Log.LogInfo($"Found {modUpgrades.Count} count of Mod Created Blacksmith items{itemSummary}");
+            }
+            catch (Exception ex)
+            {
+                Plugin.Log?.LogWarning($"Failed to log Mod Created Blacksmith items at battle start. {ex.GetType().Name}: {ex.Message}");
             }
         }
     }

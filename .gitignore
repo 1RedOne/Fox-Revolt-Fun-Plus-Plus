@@ -1,0 +1,7 @@
+# Build output
+bin/
+obj/
+
+# C# project build output anywhere in the repo
+*/bin/
+*/obj/
